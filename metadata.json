@@ -1,0 +1,11 @@
+{
+  "name": "SK SHERRANI Live Cricket",
+  "description": "Live cricket match broadcast, instant score tracking, recorded matches, comments, and SK AI chatbot for regional matches.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
