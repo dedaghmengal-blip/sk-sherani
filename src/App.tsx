@@ -10,9 +10,11 @@ import AdminPanel from './components/AdminPanel';
 import SplashScreen from './components/SplashScreen';
 import InitializeMatchModal from './components/InitializeMatchModal';
 import MilestoneConfetti from './components/MilestoneConfetti';
+import BottomStickyScoreboard from './components/BottomStickyScoreboard';
+import UpcomingMatches from './components/UpcomingMatches';
 import { getApiUrl } from './utils/api';
 import { triggerHaptic } from './utils/vibrate';
-import { Trophy, Radio, Shield, Settings, Sparkles, HelpCircle, User, Tv, MessageSquare, Volume2, VolumeX, Share2 } from 'lucide-react';
+import { Trophy, Radio, Shield, Settings, Sparkles, HelpCircle, User, Tv, MessageSquare, Volume2, VolumeX, Share2, Calendar } from 'lucide-react';
 
 export default function App() {
   const [matchState, setMatchState] = useState<MatchState | null>(() => {
@@ -40,8 +42,8 @@ export default function App() {
   const [shareToastText, setShareToastText] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [errorLoading, setErrorLoading] = useState(false);
-  const [activeMobileTab, setActiveMobileTab] = useState<'stadium' | 'scorecard' | 'comments'>('scorecard');
-  const [activeDesktopTab, setActiveDesktopTab] = useState<'stadium' | 'watch_live'>('watch_live');
+  const [activeMobileTab, setActiveMobileTab] = useState<'stadium' | 'scorecard' | 'comments' | 'upcoming'>('scorecard');
+  const [activeDesktopTab, setActiveDesktopTab] = useState<'stadium' | 'watch_live' | 'upcoming'>('watch_live');
   const [splashLoading, setSplashLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [isOnline, setIsOnline] = useState<boolean>(() => {
@@ -49,6 +51,7 @@ export default function App() {
   });
 
   const prevStateRef = useRef<MatchState | null>(null);
+  const isLivePrevRef = useRef<boolean>(false);
 
   const [runsPulse, setRunsPulse] = useState(false);
   const prevRunsRef = useRef<number | undefined>(undefined);
@@ -214,6 +217,18 @@ export default function App() {
     const interval = setInterval(fetchMatchState, 1200);
     return () => clearInterval(interval);
   }, [speechEnabled]);
+
+  // Auto-redirect spectators to watch live sections when the camera starts broadcasting
+  useEffect(() => {
+    if (matchState) {
+      if (matchState.isLive && !isLivePrevRef.current) {
+        // Only trigger tab-focus when transitioning from offline to live streaming
+        setActiveMobileTab('stadium');
+        setActiveDesktopTab('watch_live');
+      }
+      isLivePrevRef.current = !!matchState.isLive;
+    }
+  }, [matchState?.isLive]);
 
   const handleStateUpdated = (newState: MatchState) => {
     setMatchState(newState);
@@ -433,7 +448,7 @@ export default function App() {
             <div className="space-y-6 animate-in fade-in duration-300 pb-20 md:pb-6">
               
               {/* Desktop Immersive View Alternator Tabs */}
-              <div className="hidden md:flex items-center gap-1.5 bg-[#0a0a0a] p-1.5 rounded-xl border border-white/10 max-w-lg mx-auto font-sans text-zs font-black select-none">
+              <div className="hidden md:flex items-center gap-1.5 bg-[#0a0a0a] p-1.5 rounded-xl border border-white/10 max-w-2xl mx-auto font-sans text-zs font-black select-none">
                 <button
                   type="button"
                   onClick={() => {
@@ -447,7 +462,7 @@ export default function App() {
                   }`}
                 >
                   <Tv className="w-4 h-4 text-white animate-pulse" />
-                  <span>📺 WATCH LIVE MATCH SCREEN (بلا واسطہ لائیو)</span>
+                  <span>📺 WATCH LIVE (بلا واسطہ لائیو)</span>
                 </button>
                 <button
                   type="button"
@@ -462,13 +477,28 @@ export default function App() {
                   }`}
                 >
                   <Trophy className="w-4 h-4 text-slate-950" />
-                  <span>📊 SCORECARD & STATS HUB (سکور کارڈ)</span>
+                  <span>📊 SCORECARD (سکور کارڈ)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(20);
+                    setActiveDesktopTab('upcoming');
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer text-[11px] uppercase tracking-wider ${
+                    activeDesktopTab === 'upcoming'
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4 text-emerald-400" />
+                  <span>📅 UPCOMING MATCHES (شیڈول)</span>
                 </button>
               </div>
 
               {/* 1. Desktop Experience (Hidden on Mobile) */}
               <div className="hidden md:block space-y-6">
-                {activeDesktopTab === 'watch_live' ? (
+                {activeDesktopTab === 'watch_live' && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-300">
                     {/* Immersive Streaming & Playback Theater */}
                     <div className="lg:col-span-8 space-y-6">
@@ -484,9 +514,17 @@ export default function App() {
                       />
                     </div>
                   </div>
-                ) : (
+                )}
+
+                {activeDesktopTab === 'stadium' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <StadiumScorecard matchState={matchState} />
+                  </div>
+                )}
+
+                {activeDesktopTab === 'upcoming' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <UpcomingMatches />
                   </div>
                 )}
               </div>
@@ -563,6 +601,12 @@ export default function App() {
                   </div>
                 )}
 
+                {activeMobileTab === 'upcoming' && (
+                  <div className="animate-in fade-in duration-300">
+                    <UpcomingMatches />
+                  </div>
+                )}
+
               </div>
 
               {/* Mobile Persistent Bottom Bar Navigation Menu */}
@@ -605,6 +649,19 @@ export default function App() {
                   <MessageSquare className={`w-5 h-5 ${activeMobileTab === 'comments' ? 'text-amber-500' : 'text-white/30'}`} />
                   <span>Forum</span>
                 </button>
+
+                <button
+                  onClick={() => {
+                    triggerHaptic(25);
+                    setActiveMobileTab('upcoming');
+                  }}
+                  className={`flex flex-col items-center gap-1.5 transition text-[9px] font-bold uppercase tracking-wider cursor-pointer ${
+                    activeMobileTab === 'upcoming' ? 'text-amber-500 scale-102 font-extrabold' : 'text-white/40'
+                  }`}
+                >
+                  <Calendar className={`w-5 h-5 ${activeMobileTab === 'upcoming' ? 'text-amber-500' : 'text-white/30'}`} />
+                  <span>Schedule</span>
+                </button>
               </div>
 
             </div>
@@ -615,6 +672,14 @@ export default function App() {
 
       {/* Global Bot floating overlay widget */}
       {matchState && <SkChatbot matchState={matchState} />}
+
+      {/* Real-time bottom floating scoreboard ticker */}
+      {matchState && (
+        <BottomStickyScoreboard 
+          matchState={matchState}
+          showAdmin={showAdmin}
+        />
+      )}
 
       {/* 3. Immersive Layout Footer */}
       <footer className="h-10 bg-black border-t border-white/10 px-6 flex items-center justify-between text-[10px] text-white/40 uppercase tracking-widest font-mono">

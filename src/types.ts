@@ -95,3 +95,14 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface UpcomingMatch {
+  id: string;
+  teamA: string;
+  teamB: string;
+  date: string;
+  time: string;
+  venue: string;
+  matchType: string;
+  notes?: string;
+}
+

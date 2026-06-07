@@ -3,7 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import * as dotenv from 'dotenv';
-import { MatchState, MatchComment, MatchRecording, Player } from './src/types';
+import { MatchState, MatchComment, MatchRecording, Player, UpcomingMatch } from './src/types';
 
 dotenv.config();
 
@@ -171,6 +171,74 @@ app.post('/api/match/comment', (req, res) => {
   }
 
   res.json({ success: true, comments: currentMatchState.comments });
+});
+
+// --- Upcoming Matches State & Endpoints ---
+let upcomingMatches: UpcomingMatch[] = [
+  {
+    id: "up-1",
+    teamA: "SK Sherrani Cricket Club",
+    teamB: "Quetta Gladiators Local",
+    date: "2026-06-10",
+    time: "17:00",
+    venue: "Sherrani Cricket Stadium, Quetta",
+    matchType: "T20 League Match",
+    notes: "Sardar Sherrani Premier League - Group Stage"
+  },
+  {
+    id: "up-2",
+    teamA: "Ziarat Panthers",
+    teamB: "Chaman Tigers XI",
+    date: "2026-06-12",
+    time: "15:30",
+    venue: "Quetta Cantonment Turf Stadium",
+    matchType: "T10 Friendly Cup",
+    notes: "High altitude local derby"
+  },
+  {
+    id: "up-3",
+    teamA: "Sherrani Royals",
+    teamB: "Loralai Super Kings",
+    date: "2026-06-15",
+    time: "18:00",
+    venue: "Sherrani Cricket Stadium, Quetta",
+    matchType: "T20 Semi-Final",
+    notes: "High pressure knockout live coverage"
+  }
+];
+
+// Fetch upcoming scheduled matches
+app.get('/api/match/upcoming', (req, res) => {
+  res.json(upcomingMatches);
+});
+
+// Admin: Add an upcoming match
+app.post('/api/admin/match/upcoming', (req, res) => {
+  const { teamA, teamB, date, time, venue, matchType, notes } = req.body;
+  if (!teamA || !teamB || !date || !time || !venue || !matchType) {
+    return res.status(400).json({ error: "Missing required properties to schedule a match" });
+  }
+
+  const newUpcoming: UpcomingMatch = {
+    id: `upcoming-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    teamA: teamA.trim(),
+    teamB: teamB.trim(),
+    date: date.trim(),
+    time: time.trim(),
+    venue: venue.trim(),
+    matchType: matchType.trim(),
+    notes: notes ? notes.trim() : undefined
+  };
+
+  upcomingMatches.push(newUpcoming);
+  res.json({ success: true, upcomingMatches });
+});
+
+// Admin: Delete an upcoming match
+app.delete('/api/admin/match/upcoming/:id', (req, res) => {
+  const { id } = req.params;
+  upcomingMatches = upcomingMatches.filter(m => m.id !== id);
+  res.json({ success: true, upcomingMatches });
 });
 
 // 4. Admin - Register Teams & Squads (Complete customizable setup with Toss options)

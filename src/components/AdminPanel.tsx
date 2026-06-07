@@ -6,7 +6,7 @@ import StadiumScorecard from './StadiumScorecard';
 import { 
   Lock, CheckCircle, Video, Play, Square, Award, AlertCircle, RotateCcw, 
   UserPlus, Scroll, RefreshCw, Undo, Plus, Shuffle, Settings, ShieldCheck, Mail,
-  Trash2, Edit3, Save, Users, Zap, Tv, Sparkles
+  Trash2, Edit3, Save, Users, Zap, Tv, Sparkles, Calendar
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -115,6 +115,103 @@ export default function AdminPanel({ matchState, onStateUpdated }: AdminPanelPro
   const [selectedFielder, setSelectedFielder] = useState<string>('');
   const [customWicketText, setCustomWicketText] = useState<string>('');
   const [unlockInitForm, setUnlockInitForm] = useState(false);
+
+  // Camera facing mode: defaults to 'environment' (real back camera)
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
+
+  // --- Upcoming Matches Management States & Methods ---
+  const [upcomingMatchesList, setUpcomingMatchesList] = useState<any[]>([]);
+  const [upTeamA, setUpTeamA] = useState('');
+  const [upTeamB, setUpTeamB] = useState('');
+  const [upDate, setUpDate] = useState('');
+  const [upTime, setUpTime] = useState('');
+  const [upVenue, setUpVenue] = useState('Sherrani Cricket Stadium, Quetta');
+  const [upMatchType, setUpMatchType] = useState('T20 Match');
+  const [upNotes, setUpNotes] = useState('');
+  const [upStatusMsg, setUpStatusMsg] = useState('');
+  const [upStatusError, setUpStatusError] = useState(false);
+
+  const fetchAdminUpcomingMatches = async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/match/upcoming'));
+      if (res.ok) {
+        const data = await res.json();
+        setUpcomingMatchesList(data);
+      }
+    } catch (err) {
+      console.error("Failed loading upcoming matches inside admin:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchAdminUpcomingMatches();
+    }
+  }, [isAuthenticated]);
+
+  const handleAddUpcomingMatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!upTeamA || !upTeamB || !upDate || !upTime || !upVenue || !upMatchType) {
+      setUpStatusMsg("Please complete all required fields lala.");
+      setUpStatusError(true);
+      return;
+    }
+    try {
+      const resp = await fetch(getApiUrl('/api/admin/match/upcoming'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teamA: upTeamA,
+          teamB: upTeamB,
+          date: upDate,
+          time: upTime,
+          venue: upVenue,
+          matchType: upMatchType,
+          notes: upNotes
+        })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setUpcomingMatchesList(data.upcomingMatches);
+        setUpStatusMsg("🎉 Match successfully scheduled on stadium almanac!");
+        setUpStatusError(false);
+        // Reset forms
+        setUpTeamA('');
+        setUpTeamB('');
+        setUpDate('');
+        setUpTime('');
+        setUpNotes('');
+        triggerHaptic(50);
+        setTimeout(() => setUpStatusMsg(''), 4000);
+      } else {
+        const errData = await resp.json();
+        setUpStatusMsg(errData.error || "Failed scheduling match.");
+        setUpStatusError(true);
+      }
+    } catch (err) {
+      setUpStatusMsg("Network connectivity failure.");
+      setUpStatusError(true);
+    }
+  };
+
+  const handleDeleteUpcomingMatch = async (id: string) => {
+    if (!window.confirm("Are you sure you want to remove this scheduled match lala?")) return;
+    try {
+      const resp = await fetch(getApiUrl(`/api/admin/match/upcoming/${id}`), {
+        method: 'DELETE'
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setUpcomingMatchesList(data.upcomingMatches);
+        setUpStatusMsg("🗑️ Match removed from the almanac.");
+        setUpStatusError(false);
+        triggerHaptic(40);
+        setTimeout(() => setUpStatusMsg(''), 4000);
+      }
+    } catch (err) {
+      console.error("Failed deleting index:", err);
+    }
+  };
   
   // Media Recorder state for actual recording of live segment with audio
   const [isRecording, setIsRecording] = useState(false);
@@ -193,14 +290,24 @@ export default function AdminPanel({ matchState, onStateUpdated }: AdminPanelPro
       let localStream: MediaStream;
       try {
         localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 480, height: 360, frameRate: 15 },
+          video: { 
+            width: 480, 
+            height: 360, 
+            frameRate: 15, 
+            facingMode: { ideal: cameraFacingMode } 
+          },
           audio: true
         });
       } catch (audioErr) {
         console.warn("Failed to get audio and video, trying video-only stream:", audioErr);
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 480, height: 360, frameRate: 15 },
+            video: { 
+              width: 480, 
+              height: 360, 
+              frameRate: 15, 
+              facingMode: { ideal: cameraFacingMode } 
+            },
             audio: false
           });
         } catch (videoErr: any) {
@@ -338,6 +445,20 @@ export default function AdminPanel({ matchState, onStateUpdated }: AdminPanelPro
 
     const updatedState = await fetch(getApiUrl('/api/match/state')).then(r => r.json());
     onStateUpdated(updatedState);
+  };
+
+  const handleToggleCameraFacingMode = (mode: 'environment' | 'user') => {
+    triggerHaptic(15);
+    setCameraFacingMode(mode);
+    if (streamActive) {
+      // Warm restart stream to swap cameras cleanly
+      stopCameraBroadcast().then(() => {
+        setTimeout(() => {
+          // Restart stream with new camera device
+          startCameraBroadcast();
+        }, 300);
+      });
+    }
   };
 
   // Cleanup stream intervals
@@ -1513,6 +1634,37 @@ export default function AdminPanel({ matchState, onStateUpdated }: AdminPanelPro
                 </div>
               )}
 
+              {/* Intelligent Camera Sensor Device Switch */}
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-white/5 space-y-1.5 text-left mb-1.5 select-none font-mono">
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                  Select Camera (کیمرہ منتخب کریں)
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCameraFacingMode('environment')}
+                    className={`py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center gap-1 cursor-pointer border ${
+                      cameraFacingMode === 'environment'
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800/80 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span>📷 Back Camera (Real View)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCameraFacingMode('user')}
+                    className={`py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center gap-1 cursor-pointer border ${
+                      cameraFacingMode === 'user'
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800/80 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span>👤 Front (Selfie View)</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 {!streamActive ? (
                   <button
@@ -1697,6 +1849,156 @@ export default function AdminPanel({ matchState, onStateUpdated }: AdminPanelPro
               )}
             </div>
           )}
+
+          {/* UPCOMING MATCHES SCHEDULER CARD */}
+          <div className="bg-slate-950 rounded-xl p-4 border border-white/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <Calendar className="w-4 h-4 text-emerald-400" /> Schedule Match Almanac
+              </h3>
+              <span className="font-mono text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                ADMIN CONSOLE
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-normal">
+              Schedule future stadium dates. Scheduled encounters will reflect in the "Upcoming Matches" live spectators hub.
+            </p>
+
+            <form onSubmit={handleAddUpcomingMatch} className="space-y-3.5 text-xs select-none">
+              
+              <div className="grid grid-cols-2 gap-2 text-left">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Team A (Home)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Quetta Kings"
+                    value={upTeamA}
+                    onChange={(e) => setUpTeamA(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Team B (Away)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sherrani United"
+                    value={upTeamB}
+                    onChange={(e) => setUpTeamB(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-left">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Date</label>
+                  <input
+                    type="date"
+                    value={upDate}
+                    onChange={(e) => setUpDate(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2.5 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Time</label>
+                  <input
+                    type="time"
+                    value={upTime}
+                    onChange={(e) => setUpTime(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2.5 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-[9px] text-slate-400 font-bold uppercase">Ground / Venue</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Cantonment Ground, Quetta"
+                  value={upVenue}
+                  onChange={(e) => setUpVenue(e.target.value)}
+                  className="w-full bg-slate-900 text-white p-2.5 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-left">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Match Format</label>
+                  <select
+                    value={upMatchType}
+                    onChange={(e) => setUpMatchType(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium cursor-pointer"
+                  >
+                    <option value="T20 Match">T20 Match</option>
+                    <option value="T10 Tournament">T10 Match</option>
+                    <option value="Friendly Cup">Friendly Cup</option>
+                    <option value="Group Stage Match">Group Stage Match</option>
+                    <option value="Custom Exhibition">Custom Exhibition</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 font-bold uppercase">Exhib / Notes (Opt)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sardar Sherrani Cup"
+                    value={upNotes}
+                    onChange={(e) => setUpNotes(e.target.value)}
+                    className="w-full bg-slate-900 text-white p-2.5 rounded border border-slate-800 focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {upStatusMsg && (
+                <div className={`text-[11px] font-mono p-2 rounded border ${
+                  upStatusError 
+                    ? 'bg-red-950/20 text-red-400 border-red-900/30' 
+                    : 'bg-emerald-950/25 text-emerald-400 border-emerald-900/30'
+                }`}>
+                  {upStatusMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-lg text-xs uppercase tracking-wider transition active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 text-white" /> Schedule New Match
+              </button>
+
+            </form>
+
+            {/* List of currently scheduled admin matches */}
+            {upcomingMatchesList.length > 0 && (
+              <div className="pt-3 border-t border-white/5 space-y-2 text-left">
+                <h4 className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Scheduled Matches ({upcomingMatchesList.length})</h4>
+                <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 font-mono">
+                  {upcomingMatchesList.map((m) => (
+                    <div key={m.id} className="flex justify-between items-center bg-black/4c bg-black/40 border border-white/5 p-2 rounded text-[10px] gap-2">
+                      <div className="truncate flex-1">
+                        <div className="font-extrabold text-[#e2b036] truncate">{m.teamA} vs {m.teamB}</div>
+                        <div className="text-[8px] text-white/40">{m.date} | {m.time} | {m.venue}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUpcomingMatch(m.id)}
+                        className="p-1 px-1.5 rounded bg-red-950/30 border border-red-900/30 text-red-400 hover:text-red-500 hover:bg-red-900/50 transition cursor-pointer"
+                        title="Delete scheduling"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
 
         </div>
 

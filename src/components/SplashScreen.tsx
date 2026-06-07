@@ -30,21 +30,21 @@ export default function SplashScreen({ isLoading, onFinished }: SplashScreenProp
 
   useEffect(() => {
     if (!isLoading) {
-      // Small graceful delay to let user experience the branding splash
+      // Super fast fade-out once loaded to keep user experience responsive and instant
       const timer = setTimeout(() => {
         setFadeOut(true);
         const finishTimer = setTimeout(() => {
           onFinished();
-        }, 600); // match fade-out duration
+        }, 200); // match ultra-fast fade-out duration
         return () => clearTimeout(finishTimer);
-      }, 1500);
+      }, 150); // fast and snappy entrance
       return () => clearTimeout(timer);
     }
   }, [isLoading, onFinished]);
 
   return (
     <div
-      className={`fixed inset-0 z-100 bg-[#070707] flex flex-col items-center justify-center transition-all duration-700 ease-out p-6 ${
+      className={`fixed inset-0 z-100 bg-[#070707] flex flex-col items-center justify-center transition-all duration-300 ease-out p-6 ${
         fadeOut ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
       id="sk-branded-splash-screen"
